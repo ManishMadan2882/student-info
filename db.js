@@ -9,6 +9,10 @@ const  pool = new Pool({
     host: 'localhost',
   })
 
+async function show_db(){
+    const res = await pool.query('select * from public.user;')
+    console.log(res.rows);
+}
 
-
+  show_db()
   module.exports = pool;

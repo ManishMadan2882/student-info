@@ -1,11 +1,16 @@
 const express = require('express')
 const app  =  express()
+const csv =  require('csv')
+const path = require('path')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcrypt')
-const port = 5050
+const port = 5054
+const fs = require('fs')
 const secret_key = "thisentiamdoingtoday"
 const pool = require('./db')
+const multer = require('multer')
 const verifyToken =  require('./auth')
+
 app.use(express.json())
 
 app.post('/register',async (req,res)=>{
@@ -53,15 +58,59 @@ app.post('/login',async (req,res)=>{
 
    
 })
+var storage = multer.diskStorage({
+  destination: (req, file, callBack) => {
+    callBack(null, './uploads/')
+  },
+  filename: (req, file, callBack) => {
+    callBack(
+      null,
+      file.fieldname + path.extname(file.originalname),
+    )
+  },
+});
 
-app.get('/import',async(req,res)=>{
-
-  let result =await pool.query(`copy public.studentdata FROM 'SampleStudentsheet.csv' DELIMITER ',';`);
-
-  res.json({result:result})
-
+var upload = multer({
+  storage: storage,
 })
-app.get('/export',(req,res)=>{
+app.post('/api/uploadcsv', upload.single('uploadcsv'), (req, res) => {
+  csvToDb(__dirname + '/uploads/' + req.file.filename)
+  res.json({
+    msg: 'File successfully inserted!',
+    file: req.file,
+  })
+});
+
+function csvToDb(csvUrl) {
+  let stream = fs.createReadStream(csvUrl)
+  let collectionCsv = []
+  let csvFileStream = csv
+    .parse()
+    .on('data', function (data) {
+      collectionCsv.push(data)
+    })
+    .on('end', function () {
+      collectionCsv.shift()
+      pool.connect((error) => {
+        if (error) {
+          console.error(error)
+        } else {
+          let query = 'INSERT INTO public.studentdata (id, name, email) VALUES ?'
+          pool.query(query, [collectionCsv], (error, res) => {
+            console.log(error || res)
+          })
+        }
+      })
+      fs.unlinkSync(csvUrl)
+    })
+  stream.pipe(csvFileStream)
+}
+
+
+app.get('/download',(req,res)=>{
+  res.download( path.join(__dirname,'./uploads/uploadcsv.csv'), function(err) {
+   console.log('Error:'+err);
+  })
 })
 
 
